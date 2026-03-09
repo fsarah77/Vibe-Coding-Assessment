@@ -15,9 +15,12 @@ def validate_email(email: str) -> bool:
 
     BUG #1: This regex is too permissive - it accepts invalid emails
     """
-    # This pattern has a bug - can you find it?
-    pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-    return bool(re.match(pattern, email))
+    if not isinstance(email, str):
+        return False
+
+    # Require a clean local-part and at least one domain segment + TLD.
+    pattern = r"^[A-Za-z0-9](?:[A-Za-z0-9._%+\-]*[A-Za-z0-9])?@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
+    return bool(re.fullmatch(pattern, email))
 
 
 def calculate_priority_score(priority: str, days_until_due: int) -> int:
@@ -43,23 +46,24 @@ def calculate_priority_score(priority: str, days_until_due: int) -> int:
         "critical": 100,
         "high": 75,
         "medium": 50,
-        "low": 25
+        "low": 25,
     }
 
     if priority not in priority_weights:
         raise ValueError(f"Invalid priority: {priority}")
 
-    # Bug: What if priority is not in the dict?
+    if not isinstance(days_until_due, int):
+        raise ValueError("days_until_due must be an integer")
+
     base_score = priority_weights[priority]
 
-    # Bug: Off-by-one error in the conditions
     if days_until_due < 0:
         urgency_bonus = 50
     elif days_until_due == 0:
         urgency_bonus = 30
-    elif days_until_due <= 3:  # Should be <= 3
+    elif days_until_due <= 3:
         urgency_bonus = 20
-    elif days_until_due <= 7:  # Should be <= 7
+    elif days_until_due <= 7:
         urgency_bonus = 10
     else:
         urgency_bonus = 0
@@ -74,12 +78,22 @@ def sanitize_input(text: str) -> str:
     BUG #3: This function is dangerously incomplete!
     It only handles a few cases and misses critical ones.
     """
-    if not text:
+    if text is None:
         return ""
 
-    # This is NOT sufficient sanitization!
-    sanitized = text.replace("<script>", "")
-    sanitized = sanitized.replace("</script>", "")
+    if not isinstance(text, str):
+        text = str(text)
+
+    sanitized = text
+
+    # Remove full script/style blocks including content.
+    sanitized = re.sub(r"<\s*(script|style)\b[^>]*>.*?<\s*/\s*\1\s*>", "", sanitized, flags=re.IGNORECASE | re.DOTALL)
+
+    # Remove inline event handlers like onerror=, onclick=, etc.
+    sanitized = re.sub(r"\son\w+\s*=\s*(\".*?\"|'.*?'|[^\s>]+)", "", sanitized, flags=re.IGNORECASE)
+
+    # Neutralize javascript: URLs in attributes/content.
+    sanitized = re.sub(r"javascript\s*:\s*", "", sanitized, flags=re.IGNORECASE)
 
     return sanitized
 
@@ -90,8 +104,13 @@ def parse_date(date_string: str) -> datetime:
 
     BUG #4: No error handling for invalid dates
     """
-    # What happens if the format is wrong?
-    return datetime.strptime(date_string, "%Y-%m-%d")
+    if not isinstance(date_string, str) or not date_string.strip():
+        raise ValueError("Date must be a non-empty string in YYYY-MM-DD format")
+
+    try:
+        return datetime.strptime(date_string, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError(f"Invalid date format: {date_string}. Expected YYYY-MM-DD") from exc
 
 
 def get_days_until_due(due_date_str: str) -> int:
